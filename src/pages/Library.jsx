@@ -27,7 +27,64 @@ export default function Library() {
   };
 
   useEffect(() => { loadResources(); }, []);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sharedUrl = params.get("sharedUrl");
 
+    if (!sharedUrl) return;
+
+    const processSharedUrl = async () => {
+      try {
+        setSaving(true);
+        setError("");
+
+        const saved = await api.post("/resources/ingest", {
+          url: sharedUrl,
+          title: sharedUrl,
+        });
+
+        const analyzed = await api.post(
+          `/ai/analyze/${saved.resource.id}`,
+          {}
+        );
+
+        setResources((current) => [
+          analyzed.resource,
+          ...current.filter(
+            (r) => r.id !== analyzed.resource.id
+          ),
+        ]);
+
+        window.history.replaceState(
+          {},
+          document.title,
+          "/library"
+        );
+      } catch (e) {
+        if (
+          e.message &&
+          e.message.toLowerCase().includes("already saved")
+        ) {
+          await loadResources();
+
+          window.history.replaceState(
+            {},
+            document.title,
+            "/library"
+          );
+        } else {
+          setError(
+            e.message ||
+            "Failed to analyze shared resource."
+          );
+        }
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    processSharedUrl();
+  }, []);
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
     return resources.filter((r) =>
@@ -113,26 +170,26 @@ export default function Library() {
 
       {loading ? <div className="empty-state">Loading your resources...</div> :
         filtered.length === 0 ? <div className="empty-state"><h3>No resources found</h3><p>Save a URL or paste learning text to begin.</p></div> :
-        <div className="resource-grid">
-          {filtered.map((resource) => (
-            <article className="resource-card" key={resource.id}>
-              <div className="resource-top">
-                <span className="resource-type">{resource.type || "web"}</span>
-                <span className="resource-status">{resource.isEducational ? "● Educational" : "● Leisure"}</span>
-              </div>
-              <h3>{resource.title || "Untitled Resource"}</h3>
-              <p>{resource.domain || "Unknown domain"}{resource.topic ? ` · ${resource.topic}` : ""}</p>
-              {resource.summary && <p style={{ marginTop: 8 }}>{resource.summary}</p>}
-              <div className="resource-bottom">
-                <span>{resource.difficulty || "Not analyzed"}</span>
-                <div style={{ display: "flex", gap: 10 }}>
-                  {resource.url && <button onClick={() => window.open(resource.url, "_blank", "noopener,noreferrer")}>Open →</button>}
-                  <button onClick={() => deleteResource(resource.id)} aria-label="Delete resource">Delete</button>
+          <div className="resource-grid">
+            {filtered.map((resource) => (
+              <article className="resource-card" key={resource.id}>
+                <div className="resource-top">
+                  <span className="resource-type">{resource.type || "web"}</span>
+                  <span className="resource-status">{resource.isEducational ? "● Educational" : "● Leisure"}</span>
                 </div>
-              </div>
-            </article>
-          ))}
-        </div>
+                <h3>{resource.title || "Untitled Resource"}</h3>
+                <p>{resource.domain || "Unknown domain"}{resource.topic ? ` · ${resource.topic}` : ""}</p>
+                {resource.summary && <p style={{ marginTop: 8 }}>{resource.summary}</p>}
+                <div className="resource-bottom">
+                  <span>{resource.difficulty || "Not analyzed"}</span>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    {resource.url && <button onClick={() => window.open(resource.url, "_blank", "noopener,noreferrer")}>Open →</button>}
+                    <button onClick={() => deleteResource(resource.id)} aria-label="Delete resource">Delete</button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
       }
 
       {showAdd && (
